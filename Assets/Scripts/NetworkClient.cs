@@ -33,9 +33,9 @@ public class NetworkClient : MonoBehaviour
         Debug.Log("We are now connected to the server");
 
         //// Example to send a handshake message:
-        // HandshakeMsg m = new HandshakeMsg();
-        // m.player.id = m_Connection.InternalId.ToString();
-        // SendToServer(JsonUtility.ToJson(m));
+         HandshakeMsg m = new HandshakeMsg();
+         m.player.id = m_Connection.InternalId.ToString();
+         SendToServer(JsonUtility.ToJson(m));
     }
 
     void OnData(DataStreamReader stream){

@@ -42,9 +42,9 @@ public class NetworkServer : MonoBehaviour
         Debug.Log("Accepted a connection");
 
         //// Example to send a handshake message:
-        // HandshakeMsg m = new HandshakeMsg();
-        // m.player.id = c.InternalId.ToString();
-        // SendToClient(JsonUtility.ToJson(m),c);        
+         HandshakeMsg m = new HandshakeMsg();
+         m.player.id = c.InternalId.ToString();
+         SendToClient(JsonUtility.ToJson(m),c);        
     }
 
     void OnData(DataStreamReader stream, int i){
