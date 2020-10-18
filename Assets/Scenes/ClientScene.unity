@@ -404,6 +404,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   serverIP: 127.0.0.1
   serverPort: 12345
+  player: {fileID: 1436326538}
+  clientPlayer: {fileID: 7029712751742711882, guid: cf4e42d997e083a498f24f90d3578dae,
+    type: 3}
 --- !u!1001 &1436326537
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -469,10 +472,16 @@ PrefabInstance:
     - target: {fileID: 7029712751742711882, guid: cf4e42d997e083a498f24f90d3578dae,
         type: 3}
       propertyPath: m_Name
-      value: Cube
+      value: Player
       objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: cf4e42d997e083a498f24f90d3578dae, type: 3}
+--- !u!4 &1436326538 stripped
+Transform:
+  m_CorrespondingSourceObject: {fileID: 3654237233056362599, guid: cf4e42d997e083a498f24f90d3578dae,
+    type: 3}
+  m_PrefabInstance: {fileID: 1436326537}
+  m_PrefabAsset: {fileID: 0}
 --- !u!1 &2106947573 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 7029712751742711882, guid: cf4e42d997e083a498f24f90d3578dae,
