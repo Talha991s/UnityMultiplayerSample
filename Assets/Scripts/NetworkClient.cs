@@ -84,6 +84,24 @@ public class NetworkClient : MonoBehaviour
                 Debug.Log("Server update message received!");
                 break;
 
+            case Commands.SPAWNEDPLAYER:
+                ServerUpdateMsg SpawnedPlayerInfo = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
+                Debug.Log("Spawned Player Data Received!");
+                ExistedSpawnedPlayer(SpawnedPlayerInfo);
+                break;
+
+            case Commands.NEWPLAYERSPAWNING:
+                PlayerUpdateMsg newPlayerSpawnInfo = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
+                Debug.Log("New Client Data received");
+                SpawningNewPlayer(newPlayerSpawnInfo);
+                break;
+
+            case Commands.DISCONNECTPLAYER:
+                DisconnectedPlayerMsg DisconnectPlayer = JsonUtility.FromJson<DisconnectedPlayerMsg>(recMsg);
+                Debug.Log("Player Disconnected");
+                DestroyDisconnectedPlayer(DisconnectPlayer);
+                break;
+
             default:
             Debug.Log("Unrecognized message received!");
             break;
@@ -132,6 +150,64 @@ public class NetworkClient : MonoBehaviour
             }
 
             cmd = m_Connection.PopEvent(m_Driver, out stream);
+        }
+    }
+
+
+
+    void SendPlayerInfo()
+    {
+        playerInfo.player.cubPos = player.position;
+        playerInfo.player.cubeColor = player.gameObject.GetComponent<Renderer>().material.color;
+
+        SendToServer(JsonUtility.ToJson(playerInfo));
+    }
+
+    void ExistedSpawnedPlayer(ServerUpdateMsg data)
+    {
+        for (int i = 0; i < data.players.Count; i++)
+        {
+            GameObject ClientPlayer = Instantiate(clientPlayer);
+            ClientList[data.players[i].id] = ClientPlayer;
+            ClientPlayer.transform.position = data.players[i].cubPos;
+            ClientPlayer.GetComponentInChildren<TextMesh>().text = data.players[i].id;
+        }
+    }
+
+    void SpawningNewPlayer(PlayerUpdateMsg data)
+    {
+        GameObject ClientPlayer = Instantiate(clientPlayer);
+        ClientList[data.player.id] = ClientPlayer;
+        ClientPlayer.GetComponentInChildren<TextMesh>().text = data.player.id;
+    }
+
+    void UpdateClientInfo(ServerUpdateMsg data)
+    {
+        for (int i = 0; i < data.players.Count; i ++)
+        {
+            if(ClientList.ContainsKey(data.players[i].id))
+            {
+                ClientList[data.players[i].id].transform.position = data.players[i].cubPos;
+                ClientList[data.players[i].id].GetComponent<Renderer>().material.color = data.players[i].cubeColor;
+
+            }
+            else if(playerInfo.player.id == data.players[i].id)
+            {
+                player.gameObject.GetComponent<Renderer>().material.color = data.players[i].cubeColor;
+                playerInfo.player.cubeColor = data.players[i].cubeColor;
+            }
+        }
+    }
+
+    void DestroyDisconnectedPlayer(DisconnectedPlayerMsg data)
+    {
+        for(int i = 0; i < data.disconnectedPlayer.Count; i++)
+        {
+            if(ClientList.ContainsKey(data.disconnectedPlayer[i]))
+            {
+                Destroy(ClientList[data.disconnectedPlayer[i]]);
+                ClientList.Remove(data.disconnectedPlayer[i]);
+            }
         }
     }
 }
