@@ -4,6 +4,8 @@ using Unity.Networking.Transport;
 using NetworkMessages;
 using NetworkObjects;
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Text;
 
 public class NetworkClient : MonoBehaviour
@@ -13,6 +15,18 @@ public class NetworkClient : MonoBehaviour
     public string serverIP;
     public ushort serverPort;
 
+    private Dictionary<string, GameObject> ClientList = new Dictionary<string, GameObject>();
+
+    [SerializeField]
+    Transform player = null;
+
+    [SerializeField]
+    GameObject clientPlayer = null;
+
+    PlayerUpdateMsg playerInfo = new PlayerUpdateMsg();
+
+    TextMesh playerIDtext = null;
+
     
     void Start ()
     {
@@ -20,6 +34,8 @@ public class NetworkClient : MonoBehaviour
         m_Connection = default(NetworkConnection);
         var endpoint = NetworkEndPoint.Parse(serverIP,serverPort);
         m_Connection = m_Driver.Connect(endpoint);
+
+        playerIDtext = player.gameObject.GetComponentInChildren<TextMesh>();
     }
     
     void SendToServer(string message){
@@ -32,6 +48,7 @@ public class NetworkClient : MonoBehaviour
     void OnConnect(){
         Debug.Log("We are now connected to the server");
 
+        InvokeRepeating("PlayerInfo", 0.1f, 0.02f);
         //// Example to send a handshake message:
          HandshakeMsg m = new HandshakeMsg();
          m.player.id = m_Connection.InternalId.ToString();
@@ -49,14 +66,24 @@ public class NetworkClient : MonoBehaviour
             HandshakeMsg hsMsg = JsonUtility.FromJson<HandshakeMsg>(recMsg);
             Debug.Log("Handshake message received!");
             break;
+
+            case Commands.PLAYER_ID:
+                PlayerUpdateMsg iDee = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
+                Debug.Log("Got ID From Sever!");
+                playerInfo.player.id = iDee.player.id;
+                playerIDtext.text = playerInfo.player.id;
+                break;
+
             case Commands.PLAYER_UPDATE:
-            PlayerUpdateMsg puMsg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
-            Debug.Log("Player update message received!");
-            break;
+                PlayerUpdateMsg puMsg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
+                Debug.Log("Received Player Position fron Server : " + puMsg.player.cubPos);
+                break;
+
             case Commands.SERVER_UPDATE:
-            ServerUpdateMsg suMsg = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
-            Debug.Log("Server update message received!");
-            break;
+                ServerUpdateMsg suMsg = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
+                Debug.Log("Server update message received!");
+                break;
+
             default:
             Debug.Log("Unrecognized message received!");
             break;
