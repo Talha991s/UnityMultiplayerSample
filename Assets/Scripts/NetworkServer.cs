@@ -3,6 +3,7 @@ using UnityEngine.Assertions;
 using Unity.Collections;
 using Unity.Networking.Transport;
 using NetworkMessages;
+using System.Collections.Generic;
 using System;
 using System.Text;
 
@@ -11,6 +12,14 @@ public class NetworkServer : MonoBehaviour
     public NetworkDriver m_Driver;
     public ushort serverPort;
     private NativeList<NetworkConnection> m_Connections;
+
+    private Dictionary<string, NetworkObjects.NetworkPlayer> clientList = new Dictionary<string, NetworkObjects.NetworkPlayer>();
+    private Dictionary<string, float> clientHeartBeat = new Dictionary<string, float>();
+
+    float lastplayerInfo = 0.0f;
+    float delaytosendplayerinfo = 0.02f;
+    float deltaplayercolor = 0.0f;
+    float delayinplayerColor = 1.0f;
 
     void Start ()
     {
@@ -37,17 +46,49 @@ public class NetworkServer : MonoBehaviour
         m_Connections.Dispose();
     }
 
-    void OnConnect(NetworkConnection c){
-        m_Connections.Add(c);
+    void OnConnect(NetworkConnection c)
+    {
+        
         Debug.Log("Accepted a connection");
 
+        PlayerUpdateMsg iDee = new PlayerUpdateMsg();
+        iDee.cmd = Commands.PLAYER_ID;
+        iDee.player.id = c.InternalId.ToString();
+        Assert.IsTrue(c.IsCreated);
+        SendToClient(JsonUtility.ToJson(iDee), c);
+
+        //send to server now
+
+        ServerUpdateMsg spawnedPlayers = new ServerUpdateMsg();
+        spawnedPlayers.cmd = Commands.SPAWNEDPLAYER;
+
+        foreach(KeyValuePair<string, NetworkObjects.NetworkPlayer>element in clientList)
+        {
+            spawnedPlayers.players.Add(element.Value);
+        }
+        Assert.IsTrue(c.IsCreated);
+        SendToClient(JsonUtility.ToJson(spawnedPlayers), c);
+
+        PlayerUpdateMsg NewPlayer = new PlayerUpdateMsg();
+        NewPlayer.cmd = Commands.NEWPLAYERSPAWNING;
+        NewPlayer.player.id = c.InternalId.ToString();
+        
+        for(int i = 0; i < m_Connections.Length; i++)
+        {
+            Assert.IsTrue(m_Connections[i].IsCreated);
+            SendToClient(JsonUtility.ToJson(NewPlayer), m_Connections[i]);
+        }
+
+        m_Connections.Add(c);
+        clientList[c.InternalId.ToString()] = new NetworkObjects.NetworkPlayer();
         //// Example to send a handshake message:
-         HandshakeMsg m = new HandshakeMsg();
-         m.player.id = c.InternalId.ToString();
-         SendToClient(JsonUtility.ToJson(m),c);        
+        //HandshakeMsg m = new HandshakeMsg();
+        // m.player.id = c.InternalId.ToString();
+        // SendToClient(JsonUtility.ToJson(m),c);        
     }
 
-    void OnData(DataStreamReader stream, int i){
+    void OnData(DataStreamReader stream, int i,NetworkConnection client)
+    {
         NativeArray<byte> bytes = new NativeArray<byte>(stream.Length,Allocator.Temp);
         stream.ReadBytes(bytes);
         string recMsg = Encoding.ASCII.GetString(bytes.ToArray());
@@ -60,7 +101,8 @@ public class NetworkServer : MonoBehaviour
             break;
             case Commands.PLAYER_UPDATE:
             PlayerUpdateMsg puMsg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
-            Debug.Log("Player update message received!");
+            Debug.Log("Player "+ puMsg.player.id+"  update message received!");
+                //UpdateClientInfo(puMsg);
             break;
             case Commands.SERVER_UPDATE:
             ServerUpdateMsg suMsg = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
@@ -73,9 +115,11 @@ public class NetworkServer : MonoBehaviour
     }
 
     void OnDisconnect(int i){
-        Debug.Log("Client disconnected from server");
+        Debug.Log("Client"+m_Connections[i].InternalId.ToString()+" disconnected from server");
         m_Connections[i] = default(NetworkConnection);
     }
+
+
 
     void Update ()
     {
@@ -115,7 +159,8 @@ public class NetworkServer : MonoBehaviour
             {
                 if (cmd == NetworkEvent.Type.Data)
                 {
-                    OnData(stream, i);
+                    OnData(stream, i, m_Connections[i]);
+                    clientHeartBeat[m_Connections[i].InternalId, ToString()] = Time.time;
                 }
                 else if (cmd == NetworkEvent.Type.Disconnect)
                 {
