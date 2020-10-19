@@ -14,7 +14,7 @@ GameObject:
   - component: {fileID: 42308687677291670}
   - component: {fileID: 4125283824972278691}
   m_Layer: 0
-  m_Name: Cube
+  m_Name: Playerpre
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -108,4 +108,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 818371faae6d5f140bbcc245b8dfac65, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  velocity: 5
+  speed: 5
+  networkClient: {fileID: 0}
+  clientControlled: 0
