@@ -1,11 +1,10 @@
 ﻿using UnityEngine;
 using Unity.Collections;
+using System.Collections.Generic;
 using Unity.Networking.Transport;
 using NetworkMessages;
 using NetworkObjects;
 using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.Text;
 
 public class NetworkClient : MonoBehaviour
@@ -15,13 +14,21 @@ public class NetworkClient : MonoBehaviour
     public string serverIP;
     public ushort serverPort;
 
-    private Dictionary<string, GameObject> ClientUList = new Dictionary<string, GameObject>();
-    public string CclientID;
-    public GameObject playerIngame;
-    public GameObject playerpref;
-    PlayerUpdateMsg playerIngameUpdatemessage = new PlayerUpdateMsg();
+    // ID Set by the server for this Client
+    public string controlledClientID;
+
+    private Dictionary<string, GameObject> playerLookUpTable = new Dictionary<string, GameObject>();
+
+    // Player controlled by THIS Client
+    public GameObject controlledPlayer; 
     
-    void Start ()
+    // Prefab for Player Model
+    public GameObject playerPrefab;
+
+    // Updated messaged of controlled player on this client
+    PlayerUpdateMsg controlledPlayerUpdateMSG = new PlayerUpdateMsg();
+
+    void Start () // DONE
     {
         m_Driver = NetworkDriver.Create();
         m_Connection = default(NetworkConnection);
@@ -29,96 +36,81 @@ public class NetworkClient : MonoBehaviour
         m_Connection = m_Driver.Connect(endpoint);
     }
     
-    void SendToServer(string message){
+    void SendToServer(string message) //done
+    {
         var writer = m_Driver.BeginSend(m_Connection);
         NativeArray<byte> bytes = new NativeArray<byte>(Encoding.ASCII.GetBytes(message),Allocator.Temp);
         writer.WriteBytes(bytes);
         m_Driver.EndSend(writer);
     }
 
-    void OnConnect(){
+    void OnConnect() //done
+    {
         Debug.Log("We are now connected to the server");
-
-        InvokeRepeating("PlayerInfo", 0.1f, 0.03f);
-        //// Example to send a handshake message:
-        HandshakeMsg m = new HandshakeMsg();
-        m.player.id = m_Connection.InternalId.ToString();
-        SendToServer(JsonUtility.ToJson(m));
+        InvokeRepeating("HeartBeat", 0.1f, 0.008f);
     }
 
-    void OnData(DataStreamReader stream){
+    void OnData(DataStreamReader stream)//done
+    {
         NativeArray<byte> bytes = new NativeArray<byte>(stream.Length,Allocator.Temp);
         stream.ReadBytes(bytes);
         string recMsg = Encoding.ASCII.GetString(bytes.ToArray());
         NetworkHeader header = JsonUtility.FromJson<NetworkHeader>(recMsg);
 
-        switch(header.cmd){
+        switch(header.cmd)
+        {
             case Commands.HANDSHAKE:
-            HandshakeMsg hsMsg = JsonUtility.FromJson<HandshakeMsg>(recMsg);
-            Debug.Log("Handshake message received! Player ID : ");
-            SetupClient(hsMsg);
-            break;
-
-            //case Commands.PLAYER_ID:
-            //    PlayerUpdateMsg iDee = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
-            //    Debug.Log("Got ID From Sever!");
-            //    playerInfo.player.id = iDee.player.id;
-            //    playerIDtext.text = playerInfo.player.id;
-            //    break;
-
+                HandshakeMsg hsMsg = JsonUtility.FromJson<HandshakeMsg>(recMsg);
+                Debug.Log("Handshake message received Set clients ID");
+                SetupClient(hsMsg);
+                break;
             case Commands.PLAYER_UPDATE:
                 PlayerUpdateMsg puMsg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
-                Debug.Log("Received Player Position fron Server : "); // + puMsg.player.cubPos);
+                Debug.Log("Player update message received!");
                 break;
-
             case Commands.SERVER_UPDATE:
                 ServerUpdateMsg suMsg = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
-
-                AllPlayerUpdates(suMsg);
+                UpdateAllPlayers(suMsg);
                 Debug.Log("Server update message received!");
                 break;
-
-            case Commands.SPAWNEDPLAYER:
-                ListOfSpawnedPlayer SpawnedPlayerInfo = JsonUtility.FromJson<ListOfSpawnedPlayer>(recMsg);
-
-                ExistedSpawnedPlayer(SpawnedPlayerInfo);
-                Debug.Log("Spawned Player Data Received!");
+            case Commands.SPAWNED_PLAYERS:
+                SpawnedPlayersList spawnedPlayers = JsonUtility.FromJson<SpawnedPlayersList>(recMsg);
+                SpawnPlayers(spawnedPlayers);
+                Debug.Log("Spawned all Players from Server");
                 break;
-
-            case Commands.NEWPLAYERSPAWNING:
-                NewPlayerMessage newPlayerSpawnInfo = JsonUtility.FromJson<NewPlayerMessage>(recMsg);
-                Debug.Log("New Client Data received");
-                SpawningNewPlayer(newPlayerSpawnInfo);
+            case Commands.NEW_PLAYER:
+                NewPlayerMsg newPlayer = JsonUtility.FromJson<NewPlayerMsg>(recMsg);
+                SpawnNewPlayer(newPlayer);
+                Debug.Log("Spawned new Player from Server");
                 break;
-
-            case Commands.DISCONNECTPLAYER:
-                DisconnectedPlayerMsg DisconnectPlayer = JsonUtility.FromJson<DisconnectedPlayerMsg>(recMsg);
-                Debug.Log("Player Disconnected");
-                DestroyDisconnectedPlayer(DisconnectPlayer);
+            case Commands.DROPPED_PLAYER:
+                DroppedPlayersList droppedPlayers = JsonUtility.FromJson<DroppedPlayersList>(recMsg);
+                DestroyDroppedPlayers(droppedPlayers);
+                Debug.Log("Dropped dead players from the Server");
                 break;
-
             default:
-            Debug.Log("Unrecognized message received!");
-            break;
+                Debug.Log("Unrecognized message received!");
+                break;
         }
     }
 
-    void Disconnect(){
-        //Debug.Log("DISCONNECTED FROM SERVER! ");
+    void Disconnect() //done
+    {
         m_Connection.Disconnect(m_Driver);
         m_Connection = default(NetworkConnection);
     }
 
-    void OnDisconnect(){
+    void OnDisconnect() //done
+    {
         Debug.Log("Client got disconnected from server");
         m_Connection = default(NetworkConnection);
     }
 
-    public void OnDestroy()
+    public void OnDestroy() //done
     {
         m_Driver.Dispose();
     }   
-    void Update()
+    void Update() //done
     {
         m_Driver.ScheduleUpdate().Complete();
 
@@ -148,69 +140,79 @@ public class NetworkClient : MonoBehaviour
             cmd = m_Connection.PopEvent(m_Driver, out stream);
         }
     }
+    /**
+        Client Messages Functions to Server
+    */
 
-    void HeartBeat()
+    // Client sends controlled player's current statistics to server
+    void HeartBeat()//done
     {
-        playerIngameUpdatemessage.player.cubPos = playerIngame.transform.position;
-        SendToServer(JsonUtility.ToJson(playerIngameUpdatemessage));
+        controlledPlayerUpdateMSG.player.cubPos = controlledPlayer.transform.position;
+        //controlledPlayerUpdateMSG.player.cubeColor = controlledPlayer.GetComponent<Renderer>().material.color;
+        SendToServer(JsonUtility.ToJson(controlledPlayerUpdateMSG));
     }
+    /**
+        Client Response Functions from server messages
+    */
 
-    void SetupClient(HandshakeMsg hsMsg)
-    {
-        playerIngame = Instantiate(playerpref);
-        playerIngame.GetComponent<PlayerController>().clientControlled = true;
-        playerIngame.GetComponent<PlayerController>().networkClient = this;
-        playerIngameUpdatemessage.player.id = hsMsg.player.id;
-        CclientID = hsMsg.player.id;
+    // Response function to setup controlled players ID     
+    void SetupClient(HandshakeMsg hsMsg) //done
+    { 
+        controlledPlayer = Instantiate(playerPrefab);
+        controlledPlayer.GetComponent<PlayerController>().clientControlled = true;
+        controlledPlayer.GetComponent<PlayerController>().networkClient = this;
+        controlledPlayerUpdateMSG.player.id = hsMsg.player.id;
+        controlledClientID = hsMsg.player.id;
     }
-
-    void AllPlayerUpdates(ServerUpdateMsg serverUpdatemessage)
+    // Updates all players in client instance
+    void UpdateAllPlayers(ServerUpdateMsg serverUpdateMsg) //done
     {
-        for(int i = 0; i< serverUpdatemessage.players.Count; i++)
+        for (int i = 0; i < serverUpdateMsg.players.Count; i++)
         {
-            if(ClientUList.ContainsKey(serverUpdatemessage.players[i].id))
+            if(playerLookUpTable.ContainsKey(serverUpdateMsg.players[i].id))
             {
-                ClientUList[serverUpdatemessage.players[i].id].transform.position = serverUpdatemessage.players[i].cubPos;
-                ClientUList[serverUpdatemessage.players[i].id].GetComponent<Renderer>().material.color = serverUpdatemessage.players[i].cubeColor;
+                playerLookUpTable[serverUpdateMsg.players[i].id].transform.position = serverUpdateMsg.players[i].cubPos;
+                playerLookUpTable[serverUpdateMsg.players[i].id].GetComponent<Renderer>().material.color = serverUpdateMsg.players[i].cubeColor;
+            } 
+            else if (controlledPlayerUpdateMSG.player.id == serverUpdateMsg.players[i].id)
+            {
+                controlledPlayer.gameObject.GetComponent<Renderer>().material.color = serverUpdateMsg.players[i].cubeColor;
+                controlledPlayerUpdateMSG.player.cubeColor = serverUpdateMsg.players[i].cubeColor;
+            }           
+        }
+    }
+    // Spawns all players from the sever
+    void SpawnPlayers(SpawnedPlayersList spawnMsg) //done
+    {
+        for (int i = 0; i < spawnMsg.players.Count; i++)
+        {
+            GameObject player = Instantiate(playerPrefab);
+            playerLookUpTable[spawnMsg.players[i].id] = player;
+            player.transform.position = spawnMsg.players[i].cubPos;
+            player.GetComponent<PlayerController>().clientControlled = false;
+            player.GetComponent<PlayerController>().networkClient = this;
+        }
+    }
+    // Spawns new player from the server
+    void SpawnNewPlayer(NewPlayerMsg newPlayerMsg) //done
+    {
+        GameObject player = Instantiate(playerPrefab);
+        playerLookUpTable[newPlayerMsg.player.id] = player;
+        player.GetComponent<PlayerController>().clientControlled = false;
+        player.GetComponent<PlayerController>().networkClient = this;
+    }
 
-            }
-            else if(playerIngameUpdatemessage.player.id == serverUpdatemessage.players[i].id)
+    // Destroy Dropped players 
+    void DestroyDroppedPlayers(DroppedPlayersList dropList) //done
+    {
+        foreach (var playerID in dropList.droppedPlayers)
+        {
+            if(playerLookUpTable.ContainsKey(playerID))
             {
-                playerIngame.gameObject.GetComponent<Renderer>().material.color = serverUpdatemessage.players[i].cubeColor;
-                playerIngameUpdatemessage.player.cubeColor = serverUpdatemessage.players[i].cubeColor;
+                Destroy(playerLookUpTable[playerID]);
+                playerLookUpTable.Remove(playerID);
             }
         }
     }
 
-    void ExistedSpawnedPlayer(ListOfSpawnedPlayer spawnedmessage)
-    {
-        for (int i = 0; i < spawnedmessage.players.Count; i++)
-        {
-            GameObject ClientPlayer = Instantiate(playerpref);
-            ClientUList[spawnedmessage.players[i].id] = ClientPlayer;
-            ClientPlayer.transform.position = spawnedmessage.players[i].cubPos;
-            ClientPlayer.GetComponent<PlayerController>().clientControlled = false;
-            ClientPlayer.GetComponent<PlayerController>().networkClient = this;
-        }
-    }
-
-    void SpawningNewPlayer(NewPlayerMessage messagefornewplayer)
-    {
-        GameObject ClientPlayer = Instantiate(playerpref);
-        ClientUList[messagefornewplayer.player.id] = ClientPlayer;
-        ClientPlayer.GetComponent<PlayerController>().clientControlled = false;
-        ClientPlayer.GetComponent<PlayerController>().networkClient = this;
-    }
-
-    void DestroyDisconnectedPlayer(DisconnectedPlayerMsg disconnectedlist)
-    {
-        foreach(var playerID in disconnectedlist.disconnectedPlayer)
-        {
-            if(ClientUList.ContainsKey(playerID))
-            {
-                Destroy(ClientUList[playerID]);
-                ClientUList.Remove(playerID);
-            }
-        }
-    }
 }

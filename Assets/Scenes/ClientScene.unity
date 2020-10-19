@@ -404,8 +404,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   serverIP: 127.0.0.1
   serverPort: 12345
-  CclientID: 1
-  playerIngame: {fileID: 7029712751742711882, guid: cf4e42d997e083a498f24f90d3578dae,
+  controlledClientID: 1
+  controlledPlayer: {fileID: 7029712751742711882, guid: cf4e42d997e083a498f24f90d3578dae,
     type: 3}
-  playerpref: {fileID: 7029712751742711882, guid: cf4e42d997e083a498f24f90d3578dae,
+  playerPrefab: {fileID: 7029712751742711882, guid: cf4e42d997e083a498f24f90d3578dae,
     type: 3}

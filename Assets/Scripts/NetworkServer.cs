@@ -1,9 +1,9 @@
 ﻿using UnityEngine;
 using UnityEngine.Assertions;
 using Unity.Collections;
+using System.Collections.Generic;
 using Unity.Networking.Transport;
 using NetworkMessages;
-using System.Collections.Generic;
 using System;
 using System.Text;
 
@@ -12,13 +12,10 @@ public class NetworkServer : MonoBehaviour
     public NetworkDriver m_Driver;
     public ushort serverPort;
     private NativeList<NetworkConnection> m_Connections;
-
-    private Dictionary<string, NetworkObjects.NetworkPlayer> clientList = new Dictionary<string, NetworkObjects.NetworkPlayer>();
-    // private Dictionary<string, float> clientHeartBeat = new Dictionary<string, float>();
+    private Dictionary<string, NetworkObjects.NetworkPlayer> clientLookUpTable = new Dictionary<string, NetworkObjects.NetworkPlayer>();
 
     private int pktID = 0;
-
-    void Start ()
+    void Start () //done
     {
         m_Driver = NetworkDriver.Create();
         var endpoint = NetworkEndPoint.AnyIpv4;
@@ -34,72 +31,68 @@ public class NetworkServer : MonoBehaviour
         InvokeRepeating("ChangeColors", 2.0f, 1.0f);
     }
 
-    void SendToClient(string message, NetworkConnection c){
+    void SendToClient(string message, NetworkConnection c) //done
+    {
         var writer = m_Driver.BeginSend(NetworkPipeline.Null, c);
         NativeArray<byte> bytes = new NativeArray<byte>(Encoding.ASCII.GetBytes(message),Allocator.Temp);
         writer.WriteBytes(bytes);
         m_Driver.EndSend(writer);
     }
-    public void OnDestroy()
+    public void OnDestroy() //done
     {
         m_Driver.Dispose();
         m_Connections.Dispose();
     }
 
-    void OnConnect(NetworkConnection c)
+    void OnConnect(NetworkConnection c) //done
     {
-        
         Debug.Log("Accepted a connection");
-        HandshakeMsg d = new HandshakeMsg();
-        d.player.id = c.InternalId.ToString();
-        Assert.IsTrue(c.IsCreated);
-        SendToClient(JsonUtility.ToJson(d), c);
+        // Send a handshake message to Set ID
+        HandshakeMsg m = new HandshakeMsg();
+        m.player.id = c.InternalId.ToString();
+        Assert.IsTrue(c.IsCreated); 
+        SendToClient(JsonUtility.ToJson(m),c);
 
-        //send to server now
-
-        ListOfSpawnedPlayer spawnedPlayers = new ListOfSpawnedPlayer();
-
-        foreach(var client in clientList)
+        // Send List of Players to new Client
+        SpawnedPlayersList playersInServer = new SpawnedPlayersList();
+        foreach (var client in clientLookUpTable)
         {
-            spawnedPlayers.players.Add(client.Value);
+            playersInServer.players.Add(client.Value);
         }
         Assert.IsTrue(c.IsCreated);
-        SendToClient(JsonUtility.ToJson(spawnedPlayers), c);
+        SendToClient(JsonUtility.ToJson(playersInServer),c);
 
-        NewPlayerMessage NewPlayer = new NewPlayerMessage();
-        NewPlayer.player.id = c.InternalId.ToString();
-        
-        for(int i = 0; i < m_Connections.Length; i++)
+        // Send new Client to All existing Players
+        NewPlayerMsg newPlayer = new NewPlayerMsg();
+        newPlayer.player.id = c.InternalId.ToString();
+        for (int i = 0; i < m_Connections.Length; i++)
         {
             Assert.IsTrue(m_Connections[i].IsCreated);
-            SendToClient(JsonUtility.ToJson(NewPlayer), m_Connections[i]);
+            SendToClient(JsonUtility.ToJson(newPlayer), m_Connections[i]);
         }
 
         m_Connections.Add(c);
-        clientList[c.InternalId.ToString()] = new NetworkObjects.NetworkPlayer();
-        clientList[c.InternalId.ToString()].heartBeat = Time.time;
-        //// Example to send a handshake message:
-        //HandshakeMsg m = new HandshakeMsg();
-        // m.player.id = c.InternalId.ToString();
-        // SendToClient(JsonUtility.ToJson(m),c);        
+        clientLookUpTable[c.InternalId.ToString()] = new NetworkObjects.NetworkPlayer();
+        clientLookUpTable[c.InternalId.ToString()].heartBeat = Time.time;       
     }
 
-    void OnData(DataStreamReader stream, int i)
+    void OnData(DataStreamReader stream, int i) //done
     {
         NativeArray<byte> bytes = new NativeArray<byte>(stream.Length,Allocator.Temp);
         stream.ReadBytes(bytes);
         string recMsg = Encoding.ASCII.GetString(bytes.ToArray());
         NetworkHeader header = JsonUtility.FromJson<NetworkHeader>(recMsg);
 
-        switch(header.cmd){
+        switch(header.cmd)
+        {
             case Commands.HANDSHAKE:
             HandshakeMsg hsMsg = JsonUtility.FromJson<HandshakeMsg>(recMsg);
-            Debug.Log("PktID:  "+ pktID+"Handshake receive for " + hsMsg.player.id);
+            Debug.Log("PacketID: "+pktID+" Handshake from: "+hsMsg.player.id);
             break;
             case Commands.PLAYER_UPDATE:
             PlayerUpdateMsg puMsg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
-            Debug.Log("Player "+pktID+"  update message received for : "+puMsg.player.id);
-             UpdateClientInfo(puMsg);
+            Debug.Log("PacketID: "+pktID+" PlayerUpdate from: "+puMsg.player.id);
+            UpdateClientStats(puMsg);
             break;
             case Commands.SERVER_UPDATE:
             ServerUpdateMsg suMsg = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
@@ -112,14 +105,13 @@ public class NetworkServer : MonoBehaviour
         pktID++;
     }
 
-    void OnDisconnect(int i){
+    void OnDisconnect(int i) //done
+    {
         Debug.Log("Client disconnected from server");
         m_Connections[i] = default(NetworkConnection);
     }
 
-
-
-    void Update ()
+    void Update () //done
     {
         m_Driver.ScheduleUpdate().Complete();
 
@@ -158,7 +150,6 @@ public class NetworkServer : MonoBehaviour
                 if (cmd == NetworkEvent.Type.Data)
                 {
                     OnData(stream, i);
-                    //clientHeartBeat[m_Connections[i].InternalId.ToString()] = Time.time;
                 }
                 else if (cmd == NetworkEvent.Type.Disconnect)
                 {
@@ -168,81 +159,75 @@ public class NetworkServer : MonoBehaviour
                 cmd = m_Driver.PopEventForConnection(m_Connections[i], out stream);
             }
         }
-        
-        HeartBeatCheck();
+
+        // Check for dead Clients
+        CheckHeartBeats();
     }
 
-    void UpdateClientInfo(PlayerUpdateMsg puMsg)
+    void UpdateClientStats(PlayerUpdateMsg puMsg) //done
     {
-        if (clientList.ContainsKey(puMsg.player.id))
+        if (clientLookUpTable.ContainsKey(puMsg.player.id))
         {
-            clientList[puMsg.player.id].id = puMsg.player.id;
-            clientList[puMsg.player.id].cubPos = puMsg.player.cubPos;
-            clientList[puMsg.player.id].heartBeat = Time.time;
+            clientLookUpTable[puMsg.player.id].id = puMsg.player.id;
+            clientLookUpTable[puMsg.player.id].cubPos = puMsg.player.cubPos;
+            clientLookUpTable[puMsg.player.id].heartBeat = Time.time;
         }
     }
 
-
-    void SendPlayerInfoToClient()
+    void SendAllClientStats()//done
     {
-        ServerUpdateMsg message = new ServerUpdateMsg();
-
-        foreach(var client in clientList)
+        ServerUpdateMsg m = new ServerUpdateMsg();
+        foreach (var client in clientLookUpTable)
         {
-            message.players.Add(client.Value);
+            m.players.Add(client.Value);
         }
-
         for (int i = 0; i < m_Connections.Length; i++)
         {
-            Assert.IsTrue(m_Connections[i].IsCreated);
-            SendToClient(JsonUtility.ToJson(message), m_Connections[i]);
+            Assert.IsTrue(m_Connections[i].IsCreated); 
+            SendToClient(JsonUtility.ToJson(m), m_Connections[i]);
         }
     }
 
-
-    void HeartBeatCheck()
+    void CheckHeartBeats() //done
     {
-        List<string> deleteList = new List<string>();
-        foreach(var heart in clientList)
+        List<string> theDead = new List<string>();
+        // Check all clients Heartbeat
+        foreach (var heart in clientLookUpTable)
         {
             if(Time.time - heart.Value.heartBeat >= 1.0f)
             {
-                deleteList.Add(heart.Key);
+                theDead.Add(heart.Key);
             }
         }
-        if(deleteList.Count > 0)
+        // Check if dead exists
+        if(theDead.Count > 0)
         {
-            for (int i = 0; i < deleteList.Count; i++)
+            // Clear Look Up Table of Dead clients
+            for (int i = 0; i < theDead.Count; i++)
             {
-                clientList.Remove(deleteList[i]);
-                //clientHeartBeat.Remove(deleteList[i]);
+                clientLookUpTable.Remove(theDead[i]);
             }
-            DisconnectedPlayerMsg disconnectMessage = new DisconnectedPlayerMsg();
-            disconnectMessage.disconnectedPlayer = deleteList;
 
-            for(int i = 0; i < m_Connections.Length; i++)
-            {
-                if(!deleteList.Contains(m_Connections[i].InternalId.ToString()))
+            DroppedPlayersList dropList = new DroppedPlayersList();
+            dropList.droppedPlayers = theDead;
+
+            // Send drop list to all clients except dropped ones
+            for (int i = 0; i < m_Connections.Length; i++)
+            {   
+                if(!theDead.Contains(m_Connections[i].InternalId.ToString()))
                 {
-                    Assert.IsTrue(m_Connections[i].IsCreated);
-                    SendToClient(JsonUtility.ToJson(disconnectMessage), m_Connections[i]);
+                    Assert.IsTrue(m_Connections.IsCreated);
+                    SendToClient(JsonUtility.ToJson(dropList), m_Connections[i]);
                 }
-
-                
             }
         }
     }
 
-
-    void ChangeColorOfClient()
+    void ChangeColors()//done
     {
-        //Debug.Log("Change Color");
-        foreach (var player in clientList)
+        foreach (var player in clientLookUpTable)
         {
-            player.Value.cubeColor = new Color(UnityEngine.Random.Range(0.0f, 1.0f), UnityEngine.Random.Range(0.0f, 1.0f), UnityEngine.Random.Range(0.0f, 1.0f));
-
+            player.Value.cubeColor = new Color(UnityEngine.Random.Range(0.0f,1.0f), UnityEngine.Random.Range(0.0f,1.0f), UnityEngine.Random.Range(0.0f,1.0f));
         }
     }
-
-
 }

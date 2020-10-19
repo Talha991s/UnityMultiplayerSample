@@ -4,86 +4,95 @@ using UnityEngine;
 
 namespace NetworkMessages
 {
-    public enum Commands{
+    public enum Commands
+    {
         PLAYER_UPDATE,
         SERVER_UPDATE,
         HANDSHAKE,
         PLAYER_INPUT,
-        SPAWNEDPLAYER,
-        NEWPLAYERSPAWNING,
-        DISCONNECTPLAYER
+        SPAWNED_PLAYERS,
+        NEW_PLAYER,
+        DROPPED_PLAYER
     }
 
     [System.Serializable]
-    public class NetworkHeader{
+    public class NetworkHeader
+    {
         public Commands cmd;
     }
 
     [System.Serializable]
-    public class HandshakeMsg:NetworkHeader{
+    public class HandshakeMsg : NetworkHeader
+    {
         public NetworkObjects.NetworkPlayer player;
-        public HandshakeMsg(){      // Constructor
+        public HandshakeMsg()  // Constructor
+        {     
             cmd = Commands.HANDSHAKE;
             player = new NetworkObjects.NetworkPlayer();
         }
     }
     
     [System.Serializable]
-    public class PlayerUpdateMsg:NetworkHeader{
+    public class PlayerUpdateMsg : NetworkHeader 
+    { 
         public NetworkObjects.NetworkPlayer player;
-        public PlayerUpdateMsg(){      // Constructor
+        public PlayerUpdateMsg() // Constructor
+        {      
             cmd = Commands.PLAYER_UPDATE;
             player = new NetworkObjects.NetworkPlayer();
         }
     };
 
-    public class PlayerInputMsg:NetworkHeader{
+    public class PlayerInputMsg : NetworkHeader 
+    {
         public Input myInput;
-        public PlayerInputMsg(){
+        public PlayerInputMsg()
+        {
             cmd = Commands.PLAYER_INPUT;
             myInput = new Input();
         }
     }
     [System.Serializable]
-    public class  ServerUpdateMsg:NetworkHeader{
+    public class  ServerUpdateMsg : NetworkHeader
+    {
         public List<NetworkObjects.NetworkPlayer> players;
-        public ServerUpdateMsg(){      // Constructor
+        public ServerUpdateMsg()  // Constructor
+        {     
             cmd = Commands.SERVER_UPDATE;
             players = new List<NetworkObjects.NetworkPlayer>();
         }
     }
 
     [System.Serializable]
-    public class ListOfSpawnedPlayer : NetworkHeader
+    public class SpawnedPlayersList : NetworkHeader
     {
         public List<NetworkObjects.NetworkPlayer> players;
-
-        public ListOfSpawnedPlayer()
+        public SpawnedPlayersList()
         {
-            cmd = Commands.SPAWNEDPLAYER;
+            cmd = Commands.SPAWNED_PLAYERS;
             players = new List<NetworkObjects.NetworkPlayer>();
         }
     }
 
     [System.Serializable]
-    public class NewPlayerMessage : NetworkHeader
-    {
+    public class NewPlayerMsg : NetworkHeader 
+    { 
         public NetworkObjects.NetworkPlayer player;
-        public NewPlayerMessage()
-        {
-            cmd = Commands.NEWPLAYERSPAWNING;
+        public NewPlayerMsg() // Constructor
+        {      
+            cmd = Commands.NEW_PLAYER;
             player = new NetworkObjects.NetworkPlayer();
         }
-    }
+    };
 
     [System.Serializable]
-    public class DisconnectedPlayerMsg : NetworkHeader
+    public class DroppedPlayersList : NetworkHeader
     {
-        public List<string> disconnectedPlayer;
-        public DisconnectedPlayerMsg()
+        public List<string> droppedPlayers;
+        public DroppedPlayersList()
         {
-            cmd = Commands.DISCONNECTPLAYER;
-            disconnectedPlayer = new List<string>();
+            cmd = Commands.DROPPED_PLAYER;
+            droppedPlayers = new List<string>();
         }
     }
 } 
@@ -91,18 +100,20 @@ namespace NetworkMessages
 namespace NetworkObjects
 {
     [System.Serializable]
-    public class NetworkObject{
+    public class NetworkObject
+    {
         public string id;
     }
     [System.Serializable]
-    public class NetworkPlayer : NetworkObject{
+    public class NetworkPlayer : NetworkObject
+    {
         public Color cubeColor;
         public Vector3 cubPos;
         public float heartBeat;
-
-        public NetworkPlayer(){
+        public NetworkPlayer()
+        {
             cubeColor = new Color();
-            cubPos = Vector3.zero;
+            cubPos = new Vector3(0,0,0);
         }
     }
 }
