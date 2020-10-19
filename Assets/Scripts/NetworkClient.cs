@@ -48,11 +48,11 @@ public class NetworkClient : MonoBehaviour
     void OnConnect(){
         Debug.Log("We are now connected to the server");
 
-        InvokeRepeating("PlayerInfo", 0.1f, 0.02f);
+        InvokeRepeating("PlayerInfo", 0.1f, 0.03f);
         //// Example to send a handshake message:
-         HandshakeMsg m = new HandshakeMsg();
-         m.player.id = m_Connection.InternalId.ToString();
-         SendToServer(JsonUtility.ToJson(m));
+         //HandshakeMsg m = new HandshakeMsg();
+         //m.player.id = m_Connection.InternalId.ToString();
+         //SendToServer(JsonUtility.ToJson(m));
     }
 
     void OnData(DataStreamReader stream){
@@ -82,6 +82,7 @@ public class NetworkClient : MonoBehaviour
             case Commands.SERVER_UPDATE:
                 ServerUpdateMsg suMsg = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
                 Debug.Log("Server update message received!");
+                UpdateClientInfo(suMsg);
                 break;
 
             case Commands.SPAWNEDPLAYER:
@@ -109,6 +110,7 @@ public class NetworkClient : MonoBehaviour
     }
 
     void Disconnect(){
+        Debug.Log("DISCONNECTED FROM SERVER! ");
         m_Connection.Disconnect(m_Driver);
         m_Connection = default(NetworkConnection);
     }
@@ -183,7 +185,7 @@ public class NetworkClient : MonoBehaviour
 
     void UpdateClientInfo(ServerUpdateMsg data)
     {
-        for (int i = 0; i < data.players.Count; i ++)
+        for (int i = 0; i < data.players.Count; i++)
         {
             if(ClientList.ContainsKey(data.players[i].id))
             {

@@ -102,7 +102,7 @@ public class NetworkServer : MonoBehaviour
             case Commands.PLAYER_UPDATE:
             PlayerUpdateMsg puMsg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
             Debug.Log("Player "+ puMsg.player.id+"  update message received!");
-                //UpdateClientInfo(puMsg);
+             UpdateClientInfo(puMsg);
             break;
             case Commands.SERVER_UPDATE:
             ServerUpdateMsg suMsg = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
@@ -160,7 +160,7 @@ public class NetworkServer : MonoBehaviour
                 if (cmd == NetworkEvent.Type.Data)
                 {
                     OnData(stream, i, m_Connections[i]);
-                    clientHeartBeat[m_Connections[i].InternalId, ToString()] = Time.time;
+                    clientHeartBeat[m_Connections[i].InternalId.ToString()] = Time.time;
                 }
                 else if (cmd == NetworkEvent.Type.Disconnect)
                 {
@@ -168,6 +168,88 @@ public class NetworkServer : MonoBehaviour
                 }
 
                 cmd = m_Driver.PopEventForConnection(m_Connections[i], out stream);
+            }
+        }
+        if(Time.time - lastplayerInfo >= delaytosendplayerinfo)
+        {
+            lastplayerInfo = Time.time;
+
+            SendPlayerInfoToClient();
+        }
+
+        if(Time.time - deltaplayercolor >= delayinplayerColor)
+        {
+            deltaplayercolor = Time.time;
+            ChangeColorOfClient();
+        }
+        HeartBeatCheck();
+    }
+
+    void SendPlayerInfoToClient()
+    {
+        ServerUpdateMsg message = new ServerUpdateMsg();
+
+        foreach(KeyValuePair<string, NetworkObjects.NetworkPlayer> element in  clientList)
+        {
+            message.players.Add(element.Value);
+        }
+
+        for (int i = 0; i < m_Connections.Length; i++)
+        {
+            Assert.IsTrue(m_Connections[i].IsCreated);
+            SendToClient(JsonUtility.ToJson(message), m_Connections[i]);
+        }
+    }
+
+    void UpdateClientInfo(PlayerUpdateMsg puMsg)
+    {
+        if(clientList.ContainsKey(puMsg.player.id))
+        {
+            clientList[puMsg.player.id].id = puMsg.player.id;
+            clientList[puMsg.player.id].cubPos = puMsg.player.cubPos;
+        }
+    }
+
+    void ChangeColorOfClient()
+    {
+        Debug.Log("Change Color");
+        foreach(KeyValuePair<string, NetworkObjects.NetworkPlayer> element in clientList)
+        {
+            element.Value.cubeColor = new Color(UnityEngine.Random.Range(0.0f, 1.0f), UnityEngine.Random.Range(0.0f, 1.0f), UnityEngine.Random.Range(0.0f, 1.0f));
+
+        }
+    }
+
+    void HeartBeatCheck()
+    {
+        List<string> deleteList = new List<string>();
+        foreach(KeyValuePair<string,float> element in clientHeartBeat)
+        {
+            if(Time.time - element.Value >= 5.0f)
+            {
+                Debug.Log(element.Key.ToString() + "HeartBeat Disconnected");
+                deleteList.Add(element.Key);
+            }
+        }
+        if(deleteList.Count != 0)
+        {
+            for (int i = 0; i < deleteList.Count; i++)
+            {
+                clientList.Remove(deleteList[i]);
+                clientHeartBeat.Remove(deleteList[i]);
+            }
+            DisconnectedPlayerMsg disconnectMessage = new DisconnectedPlayerMsg();
+            disconnectMessage.disconnectedPlayer = deleteList;
+
+            for(int i = 0; i < m_Connections.Length; i++)
+            {
+                if(deleteList.Contains(m_Connections[i].InternalId.ToString()) == true)
+                {
+                    continue;
+                }
+
+                Assert.IsTrue(m_Connections[i].IsCreated);
+                SendToClient(JsonUtility.ToJson(disconnectMessage), m_Connections[i]);
             }
         }
     }
