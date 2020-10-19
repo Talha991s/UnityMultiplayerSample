@@ -15,18 +15,11 @@ public class NetworkClient : MonoBehaviour
     public string serverIP;
     public ushort serverPort;
 
-    private Dictionary<string, GameObject> ClientList = new Dictionary<string, GameObject>();
-
-    [SerializeField]
-    Transform player = null;
-
-    [SerializeField]
-    GameObject clientPlayer = null;
-
-    PlayerUpdateMsg playerInfo = new PlayerUpdateMsg();
-
-    TextMesh playerIDtext = null;
-
+    private Dictionary<string, GameObject> ClientUList = new Dictionary<string, GameObject>();
+    public string CclientID;
+    public GameObject playerIngame;
+    public GameObject playerpref;
+    PlayerUpdateMsg playerIngameUpdatemessage = new PlayerUpdateMsg();
     
     void Start ()
     {
@@ -34,8 +27,6 @@ public class NetworkClient : MonoBehaviour
         m_Connection = default(NetworkConnection);
         var endpoint = NetworkEndPoint.Parse(serverIP,serverPort);
         m_Connection = m_Driver.Connect(endpoint);
-
-        playerIDtext = player.gameObject.GetComponentInChildren<TextMesh>();
     }
     
     void SendToServer(string message){
@@ -50,9 +41,9 @@ public class NetworkClient : MonoBehaviour
 
         InvokeRepeating("PlayerInfo", 0.1f, 0.03f);
         //// Example to send a handshake message:
-         //HandshakeMsg m = new HandshakeMsg();
-         //m.player.id = m_Connection.InternalId.ToString();
-         //SendToServer(JsonUtility.ToJson(m));
+        HandshakeMsg m = new HandshakeMsg();
+        m.player.id = m_Connection.InternalId.ToString();
+        SendToServer(JsonUtility.ToJson(m));
     }
 
     void OnData(DataStreamReader stream){
@@ -64,19 +55,20 @@ public class NetworkClient : MonoBehaviour
         switch(header.cmd){
             case Commands.HANDSHAKE:
             HandshakeMsg hsMsg = JsonUtility.FromJson<HandshakeMsg>(recMsg);
-            Debug.Log("Handshake message received!");
+            Debug.Log("Handshake message received! Player ID : ");
+                //SetupClient(hsMsg);
             break;
 
-            case Commands.PLAYER_ID:
-                PlayerUpdateMsg iDee = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
-                Debug.Log("Got ID From Sever!");
-                playerInfo.player.id = iDee.player.id;
-                playerIDtext.text = playerInfo.player.id;
-                break;
+            //case Commands.PLAYER_ID:
+            //    PlayerUpdateMsg iDee = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
+            //    Debug.Log("Got ID From Sever!");
+            //    playerInfo.player.id = iDee.player.id;
+            //    playerIDtext.text = playerInfo.player.id;
+            //    break;
 
             case Commands.PLAYER_UPDATE:
                 PlayerUpdateMsg puMsg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
-                Debug.Log("Received Player Position fron Server : " + puMsg.player.cubPos);
+                Debug.Log("Received Player Position fron Server : "); // + puMsg.player.cubPos);
                 break;
 
             case Commands.SERVER_UPDATE:
@@ -110,7 +102,7 @@ public class NetworkClient : MonoBehaviour
     }
 
     void Disconnect(){
-        Debug.Log("DISCONNECTED FROM SERVER! ");
+        //Debug.Log("DISCONNECTED FROM SERVER! ");
         m_Connection.Disconnect(m_Driver);
         m_Connection = default(NetworkConnection);
     }
@@ -155,17 +147,40 @@ public class NetworkClient : MonoBehaviour
         }
     }
 
-
-
-    void SendPlayerInfo()
+    void HeartBeat()
     {
-        playerInfo.player.cubPos = player.position;
-        playerInfo.player.cubeColor = player.gameObject.GetComponent<Renderer>().material.color;
-
-        SendToServer(JsonUtility.ToJson(playerInfo));
+        playerIngameUpdatemessage.player.cubPos = playerIngame.transform.position;
+        SendToServer(JsonUtility.ToJson(playerIngameUpdatemessage));
     }
 
-    void ExistedSpawnedPlayer(ServerUpdateMsg data)
+    void SetupClient(HandshakeMsg hsMsg)
+    {
+        playerIngame = Instantiate(playerpref);
+        playerIngame.GetComponent<PlayerController>().clientControlled = true;
+        playerIngame.GetComponent<PlayerController>().networkClient = this;
+        playerIngameUpdatemessage.player.id = hsMsg.player.id;
+        CclientID = hsMsg.player.id;
+    }
+
+    void AllPlayerUpdates(ServerUpdateMsg serverUpdatemessage)
+    {
+        for(int i = 0; i< serverUpdatemessage.players.Count; i++)
+        {
+            if(ClientUList.ContainsKey(serverUpdatemessage.players[i].id))
+            {
+                ClientUList[serverUpdatemessage.players[i].id].transform.position = serverUpdatemessage.players[i].cubPos;
+                ClientUList[serverUpdatemessage.players[i].id].GetComponent<Renderer>().material.color = serverUpdatemessage.players[i].cubeColor;
+
+            }
+            else if(playerIngameUpdatemessage.player.id == serverUpdatemessage.players[i].id)
+            {
+                playerIngame.gameObject.GetComponent<Renderer>().material.color = serverUpdatemessage.players[i].cubeColor;
+                playerIngameUpdatemessage.player.cubeColor = serverUpdatemessage.players[i].cubeColor;
+            }
+        }
+    }
+
+    void ExistedSpawnedPlayer(ListOfSpawnedPlayer spawnedmessage)
     {
         for (int i = 0; i < data.players.Count; i++)
         {
@@ -181,24 +196,6 @@ public class NetworkClient : MonoBehaviour
         GameObject ClientPlayer = Instantiate(clientPlayer);
         ClientList[data.player.id] = ClientPlayer;
         ClientPlayer.GetComponentInChildren<TextMesh>().text = data.player.id;
-    }
-
-    void UpdateClientInfo(ServerUpdateMsg data)
-    {
-        for (int i = 0; i < data.players.Count; i++)
-        {
-            if(ClientList.ContainsKey(data.players[i].id))
-            {
-                ClientList[data.players[i].id].transform.position = data.players[i].cubPos;
-                ClientList[data.players[i].id].GetComponent<Renderer>().material.color = data.players[i].cubeColor;
-
-            }
-            else if(playerInfo.player.id == data.players[i].id)
-            {
-                player.gameObject.GetComponent<Renderer>().material.color = data.players[i].cubeColor;
-                playerInfo.player.cubeColor = data.players[i].cubeColor;
-            }
-        }
     }
 
     void DestroyDisconnectedPlayer(DisconnectedPlayerMsg data)

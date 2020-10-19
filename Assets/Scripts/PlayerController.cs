@@ -4,27 +4,17 @@ using UnityEngine;
 
 public class PlayerController : MonoBehaviour
 {
-    Rigidbody rb = null;
-    Vector3 direction = Vector3.zero;
-    [SerializeField]
-    float velocity = 0.0f;
-    // Start is called before the first frame update
-    void Start()
-    {
-        rb = GetComponent<Rigidbody>();
-        //if (gameObject.name == FindObjectOfType<NetworkMan>().myAddress)
-        //{
-        //    active = true;
-        //}
-    }
+    public float speed;
+    public NetworkClient networkClient;
+    public bool clientControlled;
+
     // Update is called once per frame
     void Update()
     {
-        direction = new Vector3(Input.GetAxis("Horizontal"), 0.0f, Input.GetAxis("Vertical")).normalized;
+        if (clientControlled)
+        {
+            transform.Translate(new Vector3(Input.GetAxis("Horizontal") * speed * Time.deltaTime, Input.GetAxis("Vertical") * speed * Time.deltaTime), 0);
+        }
     }
 
-    private void FixedUpdate()
-    {
-        rb.velocity = velocity * direction;  // calc directional velocity
-    }
 }

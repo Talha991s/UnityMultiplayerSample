@@ -9,7 +9,6 @@ namespace NetworkMessages
         SERVER_UPDATE,
         HANDSHAKE,
         PLAYER_INPUT,
-        PLAYER_ID,
         SPAWNEDPLAYER,
         NEWPLAYERSPAWNING,
         DISCONNECTPLAYER
@@ -51,6 +50,29 @@ namespace NetworkMessages
         public ServerUpdateMsg(){      // Constructor
             cmd = Commands.SERVER_UPDATE;
             players = new List<NetworkObjects.NetworkPlayer>();
+        }
+    }
+
+    [System.Serializable]
+    public class ListOfSpawnedPlayer : NetworkHeader
+    {
+        public List<NetworkObjects.NetworkPlayer> players;
+
+        public ListOfSpawnedPlayer()
+        {
+            cmd = Commands.SPAWNEDPLAYER;
+            players = new List<NetworkObjects.NetworkPlayer>();
+        }
+    }
+
+    [System.Serializable]
+    public class NewPlayerMessage : NetworkHeader
+    {
+        public NetworkObjects.NetworkPlayer player;
+        public NewPlayerMessage()
+        {
+            cmd = Commands.NEWPLAYERSPAWNING;
+            player = new NetworkObjects.NetworkPlayer();
         }
     }
 
