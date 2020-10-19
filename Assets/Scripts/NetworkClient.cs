@@ -56,7 +56,7 @@ public class NetworkClient : MonoBehaviour
             case Commands.HANDSHAKE:
             HandshakeMsg hsMsg = JsonUtility.FromJson<HandshakeMsg>(recMsg);
             Debug.Log("Handshake message received! Player ID : ");
-                //SetupClient(hsMsg);
+            SetupClient(hsMsg);
             break;
 
             //case Commands.PLAYER_ID:
@@ -73,18 +73,20 @@ public class NetworkClient : MonoBehaviour
 
             case Commands.SERVER_UPDATE:
                 ServerUpdateMsg suMsg = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
+
+                AllPlayerUpdates(suMsg);
                 Debug.Log("Server update message received!");
-                UpdateClientInfo(suMsg);
                 break;
 
             case Commands.SPAWNEDPLAYER:
-                ServerUpdateMsg SpawnedPlayerInfo = JsonUtility.FromJson<ServerUpdateMsg>(recMsg);
-                Debug.Log("Spawned Player Data Received!");
+                ListOfSpawnedPlayer SpawnedPlayerInfo = JsonUtility.FromJson<ListOfSpawnedPlayer>(recMsg);
+
                 ExistedSpawnedPlayer(SpawnedPlayerInfo);
+                Debug.Log("Spawned Player Data Received!");
                 break;
 
             case Commands.NEWPLAYERSPAWNING:
-                PlayerUpdateMsg newPlayerSpawnInfo = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
+                NewPlayerMessage newPlayerSpawnInfo = JsonUtility.FromJson<NewPlayerMessage>(recMsg);
                 Debug.Log("New Client Data received");
                 SpawningNewPlayer(newPlayerSpawnInfo);
                 break;
@@ -182,30 +184,32 @@ public class NetworkClient : MonoBehaviour
 
     void ExistedSpawnedPlayer(ListOfSpawnedPlayer spawnedmessage)
     {
-        for (int i = 0; i < data.players.Count; i++)
+        for (int i = 0; i < spawnedmessage.players.Count; i++)
         {
-            GameObject ClientPlayer = Instantiate(clientPlayer);
-            ClientList[data.players[i].id] = ClientPlayer;
-            ClientPlayer.transform.position = data.players[i].cubPos;
-            ClientPlayer.GetComponentInChildren<TextMesh>().text = data.players[i].id;
+            GameObject ClientPlayer = Instantiate(playerpref);
+            ClientUList[spawnedmessage.players[i].id] = ClientPlayer;
+            ClientPlayer.transform.position = spawnedmessage.players[i].cubPos;
+            ClientPlayer.GetComponent<PlayerController>().clientControlled = false;
+            ClientPlayer.GetComponent<PlayerController>().networkClient = this;
         }
     }
 
-    void SpawningNewPlayer(PlayerUpdateMsg data)
+    void SpawningNewPlayer(NewPlayerMessage messagefornewplayer)
     {
-        GameObject ClientPlayer = Instantiate(clientPlayer);
-        ClientList[data.player.id] = ClientPlayer;
-        ClientPlayer.GetComponentInChildren<TextMesh>().text = data.player.id;
+        GameObject ClientPlayer = Instantiate(playerpref);
+        ClientUList[messagefornewplayer.player.id] = ClientPlayer;
+        ClientPlayer.GetComponent<PlayerController>().clientControlled = false;
+        ClientPlayer.GetComponent<PlayerController>().networkClient = this;
     }
 
-    void DestroyDisconnectedPlayer(DisconnectedPlayerMsg data)
+    void DestroyDisconnectedPlayer(DisconnectedPlayerMsg disconnectedlist)
     {
-        for(int i = 0; i < data.disconnectedPlayer.Count; i++)
+        foreach(var playerID in disconnectedlist.disconnectedPlayer)
         {
-            if(ClientList.ContainsKey(data.disconnectedPlayer[i]))
+            if(ClientUList.ContainsKey(playerID))
             {
-                Destroy(ClientList[data.disconnectedPlayer[i]]);
-                ClientList.Remove(data.disconnectedPlayer[i]);
+                Destroy(ClientUList[playerID]);
+                ClientUList.Remove(playerID);
             }
         }
     }

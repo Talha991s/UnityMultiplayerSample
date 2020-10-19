@@ -14,12 +14,9 @@ public class NetworkServer : MonoBehaviour
     private NativeList<NetworkConnection> m_Connections;
 
     private Dictionary<string, NetworkObjects.NetworkPlayer> clientList = new Dictionary<string, NetworkObjects.NetworkPlayer>();
-    private Dictionary<string, float> clientHeartBeat = new Dictionary<string, float>();
+    // private Dictionary<string, float> clientHeartBeat = new Dictionary<string, float>();
 
-    float lastplayerInfo = 0.0f;
-    float delaytosendplayerinfo = 0.02f;
-    float deltaplayercolor = 0.0f;
-    float delayinplayerColor = 1.0f;
+    private int pktID = 0;
 
     void Start ()
     {
@@ -32,6 +29,9 @@ public class NetworkServer : MonoBehaviour
             m_Driver.Listen();
 
         m_Connections = new NativeList<NetworkConnection>(16, Allocator.Persistent);
+
+        InvokeRepeating("SendAllClientStats", 0.1f, 0.008f);
+        InvokeRepeating("ChangeColors", 2.0f, 1.0f);
     }
 
     void SendToClient(string message, NetworkConnection c){
@@ -50,27 +50,23 @@ public class NetworkServer : MonoBehaviour
     {
         
         Debug.Log("Accepted a connection");
-
-        PlayerUpdateMsg iDee = new PlayerUpdateMsg();
-        iDee.cmd = Commands.PLAYER_ID;
-        iDee.player.id = c.InternalId.ToString();
+        HandshakeMsg d = new HandshakeMsg();
+        d.player.id = c.InternalId.ToString();
         Assert.IsTrue(c.IsCreated);
-        SendToClient(JsonUtility.ToJson(iDee), c);
+        SendToClient(JsonUtility.ToJson(d), c);
 
         //send to server now
 
-        ServerUpdateMsg spawnedPlayers = new ServerUpdateMsg();
-        spawnedPlayers.cmd = Commands.SPAWNEDPLAYER;
+        ListOfSpawnedPlayer spawnedPlayers = new ListOfSpawnedPlayer();
 
-        foreach(KeyValuePair<string, NetworkObjects.NetworkPlayer>element in clientList)
+        foreach(var client in clientList)
         {
-            spawnedPlayers.players.Add(element.Value);
+            spawnedPlayers.players.Add(client.Value);
         }
         Assert.IsTrue(c.IsCreated);
         SendToClient(JsonUtility.ToJson(spawnedPlayers), c);
 
-        PlayerUpdateMsg NewPlayer = new PlayerUpdateMsg();
-        NewPlayer.cmd = Commands.NEWPLAYERSPAWNING;
+        NewPlayerMessage NewPlayer = new NewPlayerMessage();
         NewPlayer.player.id = c.InternalId.ToString();
         
         for(int i = 0; i < m_Connections.Length; i++)
@@ -81,13 +77,14 @@ public class NetworkServer : MonoBehaviour
 
         m_Connections.Add(c);
         clientList[c.InternalId.ToString()] = new NetworkObjects.NetworkPlayer();
+        clientList[c.InternalId.ToString()].heartBeat = Time.time;
         //// Example to send a handshake message:
         //HandshakeMsg m = new HandshakeMsg();
         // m.player.id = c.InternalId.ToString();
         // SendToClient(JsonUtility.ToJson(m),c);        
     }
 
-    void OnData(DataStreamReader stream, int i,NetworkConnection client)
+    void OnData(DataStreamReader stream, int i)
     {
         NativeArray<byte> bytes = new NativeArray<byte>(stream.Length,Allocator.Temp);
         stream.ReadBytes(bytes);
@@ -97,11 +94,11 @@ public class NetworkServer : MonoBehaviour
         switch(header.cmd){
             case Commands.HANDSHAKE:
             HandshakeMsg hsMsg = JsonUtility.FromJson<HandshakeMsg>(recMsg);
-            Debug.Log("Handshake message received!");
+            Debug.Log("PktID:  "+ pktID+"Handshake receive for " + hsMsg.player.id);
             break;
             case Commands.PLAYER_UPDATE:
             PlayerUpdateMsg puMsg = JsonUtility.FromJson<PlayerUpdateMsg>(recMsg);
-            Debug.Log("Player "+ puMsg.player.id+"  update message received!");
+            Debug.Log("Player "+pktID+"  update message received for : "+puMsg.player.id);
              UpdateClientInfo(puMsg);
             break;
             case Commands.SERVER_UPDATE:
@@ -112,10 +109,11 @@ public class NetworkServer : MonoBehaviour
             Debug.Log("SERVER ERROR: Unrecognized message received!");
             break;
         }
+        pktID++;
     }
 
     void OnDisconnect(int i){
-        Debug.Log("Client"+m_Connections[i].InternalId.ToString()+" disconnected from server");
+        Debug.Log("Client disconnected from server");
         m_Connections[i] = default(NetworkConnection);
     }
 
@@ -159,8 +157,8 @@ public class NetworkServer : MonoBehaviour
             {
                 if (cmd == NetworkEvent.Type.Data)
                 {
-                    OnData(stream, i, m_Connections[i]);
-                    clientHeartBeat[m_Connections[i].InternalId.ToString()] = Time.time;
+                    OnData(stream, i);
+                    //clientHeartBeat[m_Connections[i].InternalId.ToString()] = Time.time;
                 }
                 else if (cmd == NetworkEvent.Type.Disconnect)
                 {
@@ -170,28 +168,28 @@ public class NetworkServer : MonoBehaviour
                 cmd = m_Driver.PopEventForConnection(m_Connections[i], out stream);
             }
         }
-        if(Time.time - lastplayerInfo >= delaytosendplayerinfo)
-        {
-            lastplayerInfo = Time.time;
-
-            SendPlayerInfoToClient();
-        }
-
-        if(Time.time - deltaplayercolor >= delayinplayerColor)
-        {
-            deltaplayercolor = Time.time;
-            ChangeColorOfClient();
-        }
+        
         HeartBeatCheck();
     }
+
+    void UpdateClientInfo(PlayerUpdateMsg puMsg)
+    {
+        if (clientList.ContainsKey(puMsg.player.id))
+        {
+            clientList[puMsg.player.id].id = puMsg.player.id;
+            clientList[puMsg.player.id].cubPos = puMsg.player.cubPos;
+            clientList[puMsg.player.id].heartBeat = Time.time;
+        }
+    }
+
 
     void SendPlayerInfoToClient()
     {
         ServerUpdateMsg message = new ServerUpdateMsg();
 
-        foreach(KeyValuePair<string, NetworkObjects.NetworkPlayer> element in  clientList)
+        foreach(var client in clientList)
         {
-            message.players.Add(element.Value);
+            message.players.Add(client.Value);
         }
 
         for (int i = 0; i < m_Connections.Length; i++)
@@ -201,56 +199,50 @@ public class NetworkServer : MonoBehaviour
         }
     }
 
-    void UpdateClientInfo(PlayerUpdateMsg puMsg)
-    {
-        if(clientList.ContainsKey(puMsg.player.id))
-        {
-            clientList[puMsg.player.id].id = puMsg.player.id;
-            clientList[puMsg.player.id].cubPos = puMsg.player.cubPos;
-        }
-    }
-
-    void ChangeColorOfClient()
-    {
-        Debug.Log("Change Color");
-        foreach(KeyValuePair<string, NetworkObjects.NetworkPlayer> element in clientList)
-        {
-            element.Value.cubeColor = new Color(UnityEngine.Random.Range(0.0f, 1.0f), UnityEngine.Random.Range(0.0f, 1.0f), UnityEngine.Random.Range(0.0f, 1.0f));
-
-        }
-    }
 
     void HeartBeatCheck()
     {
         List<string> deleteList = new List<string>();
-        foreach(KeyValuePair<string,float> element in clientHeartBeat)
+        foreach(var heart in clientList)
         {
-            if(Time.time - element.Value >= 5.0f)
+            if(Time.time - heart.Value.heartBeat >= 1.0f)
             {
-                Debug.Log(element.Key.ToString() + "HeartBeat Disconnected");
-                deleteList.Add(element.Key);
+                deleteList.Add(heart.Key);
             }
         }
-        if(deleteList.Count != 0)
+        if(deleteList.Count > 0)
         {
             for (int i = 0; i < deleteList.Count; i++)
             {
                 clientList.Remove(deleteList[i]);
-                clientHeartBeat.Remove(deleteList[i]);
+                //clientHeartBeat.Remove(deleteList[i]);
             }
             DisconnectedPlayerMsg disconnectMessage = new DisconnectedPlayerMsg();
             disconnectMessage.disconnectedPlayer = deleteList;
 
             for(int i = 0; i < m_Connections.Length; i++)
             {
-                if(deleteList.Contains(m_Connections[i].InternalId.ToString()) == true)
+                if(!deleteList.Contains(m_Connections[i].InternalId.ToString()))
                 {
-                    continue;
+                    Assert.IsTrue(m_Connections[i].IsCreated);
+                    SendToClient(JsonUtility.ToJson(disconnectMessage), m_Connections[i]);
                 }
 
-                Assert.IsTrue(m_Connections[i].IsCreated);
-                SendToClient(JsonUtility.ToJson(disconnectMessage), m_Connections[i]);
+                
             }
         }
     }
+
+
+    void ChangeColorOfClient()
+    {
+        //Debug.Log("Change Color");
+        foreach (var player in clientList)
+        {
+            player.Value.cubeColor = new Color(UnityEngine.Random.Range(0.0f, 1.0f), UnityEngine.Random.Range(0.0f, 1.0f), UnityEngine.Random.Range(0.0f, 1.0f));
+
+        }
+    }
+
+
 }
